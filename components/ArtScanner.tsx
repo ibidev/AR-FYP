@@ -1,7 +1,9 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
-import * as tf from '@tensorflow/tfjs';
-import * as mobilenet from '@tensorflow-models/mobilenet';
+import jsQR from 'jsqr';
+
+// ── Change this to whatever secret you want printed on the QR code ──
+const QR_SECRET = 'IBRAHIM-AR-2026';
 
 interface ArtScannerProps {
   onAuthenticated: () => void;
@@ -10,224 +12,82 @@ interface ArtScannerProps {
 export default function ArtScanner({ onAuthenticated }: ArtScannerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [model, setModel] = useState<mobilenet.MobileNet | null>(null);
-  const [cameraActive, setCameraActive] = useState(false);
-  const [statusMessage, setStatusMessage] = useState('Initializing...');
-  const [referenceEmbedding, setReferenceEmbedding] = useState<number[] | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const [isVerifying, setIsVerifying] = useState(false);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const authenticatedRef = useRef(false);
+  const [status, setStatus] = useState('Starting camera...');
 
   useEffect(() => {
-    loadModelAndReference();
-    
-    return () => {
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach(track => track.stop());
-      }
-    };
+    startCamera();
+    return () => stopAll();
   }, []);
 
-  // Auto-start camera when ready
-  useEffect(() => {
-    if (model && referenceEmbedding && !streamRef.current) {
-      console.log('✅ Model and reference ready, starting camera');
-      startCamera();
-    }
-  }, [model, referenceEmbedding]);
-
-  const loadModelAndReference = async () => {
-    try {
-      console.log('Loading model...');
-      setStatusMessage('Loading...');
-      
-      // Set backend
-      await tf.setBackend('webgl');
-      await tf.ready();
-      
-      // Load model (should be fast from preload)
-      const loadedModel = await mobilenet.load();
-      setModel(loadedModel);
-      console.log('✓ Model loaded');
-      
-      // Load reference
-      console.log('Loading reference...');
-      const response = await fetch('/reference-embedding.json');
-      if (!response.ok) {
-        throw new Error('Reference not found');
-      }
-      
-      const data = await response.json();
-      
-      // CRITICAL: Validate reference
-      if (!data.embedding || !Array.isArray(data.embedding) || data.embedding.length === 0) {
-        throw new Error('Invalid reference file');
-      }
-      
-      setReferenceEmbedding(data.embedding);
-      console.log('✓ Reference loaded:', data.embedding.length, 'features');
-      
-    } catch (error) {
-      console.error('Setup error:', error);
-      setStatusMessage('Error loading. Please refresh.');
-    }
+  const stopAll = () => {
+    if (intervalRef.current) clearInterval(intervalRef.current);
+    if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
   };
 
   const startCamera = async () => {
     try {
-      setStatusMessage('Starting camera...');
-      console.log('Requesting camera...');
-      
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { 
-          facingMode: 'environment',
-          width: { ideal: 1200 },
-          height: { ideal: 800 }
-        } 
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
       });
-      
-      console.log('✓ Camera granted');
       streamRef.current = stream;
-      
+
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        
-        // Wait for video to load
-        await new Promise<void>((resolve) => {
+        await new Promise<void>(resolve => {
           if (videoRef.current) {
-            videoRef.current.onloadedmetadata = () => {
-              videoRef.current?.play().then(() => {
-                console.log('✓ Video playing');
-                resolve();
-              });
-            };
+            videoRef.current.onloadedmetadata = () => videoRef.current!.play().then(resolve);
           }
         });
-        
-        setCameraActive(true);
-        setStatusMessage('✓ Ready! Position art print');
+        setStatus('Point the QR code at the camera');
+        intervalRef.current = setInterval(scanFrame, 250);
       }
-    } catch (error: any) {
-      console.error('Camera error:', error);
-      let msg = 'Camera access denied';
-      if (error.name === 'NotAllowedError') {
-        msg = 'Please allow camera access';
-      } else if (error.name === 'NotFoundError') {
-        msg = 'No camera found';
-      } else if (error.name === 'NotReadableError') {
-        msg = 'Camera already in use';
-      }
-      setStatusMessage(msg);
+    } catch (err: any) {
+      const msg =
+        err.name === 'NotAllowedError' ? 'Please allow camera access and refresh' :
+        err.name === 'NotFoundError'   ? 'No camera found on this device' :
+        'Camera error — please refresh';
+      setStatus(msg);
     }
   };
 
-  const handleScanArtPrint = async () => {
-    if (!model || !videoRef.current || !referenceEmbedding || !canvasRef.current) {
-      console.error('Not ready:', { model: !!model, video: !!videoRef.current, ref: !!referenceEmbedding });
-      setStatusMessage('System not ready. Wait a moment.');
-      return;
-    }
+  const scanFrame = () => {
+    if (authenticatedRef.current) return;
+    if (!videoRef.current || !canvasRef.current) return;
 
-    setIsVerifying(true);
-    setStatusMessage('Analyzing art print...');
+    const video = videoRef.current;
+    if (video.readyState !== video.HAVE_ENOUGH_DATA) return;
 
-    try {
-      const canvas = canvasRef.current;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) {
-        throw new Error('No canvas context');
-      }
-      
-      // Use smaller resolution for speed
-      const targetWidth = 224;
-      const targetHeight = 224;
-      canvas.width = targetWidth;
-      canvas.height = targetHeight;
-      
-      ctx.drawImage(videoRef.current, 0, 0, targetWidth, targetHeight);
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
 
-      const img = tf.browser.fromPixels(canvas);
-      const embedding = model.infer(img, true) as tf.Tensor;
-      const data = await embedding.data();
-      
-      // CRITICAL: Validate embeddings before comparison
-      if (!data || data.length === 0) {
-        throw new Error('Failed to extract features');
-      }
-      
-      if (data.length !== referenceEmbedding.length) {
-        console.error('Embedding size mismatch!', {
-          captured: data.length,
-          reference: referenceEmbedding.length
-        });
-        throw new Error('Reference file incompatible');
-      }
-      
-      const similarity = cosineSimilarity(Array.from(data), referenceEmbedding);
-      
-      console.log('Similarity:', (similarity * 100).toFixed(1) + '%');
-      
-      // Check if similarity is valid
-      if (isNaN(similarity)) {
-        throw new Error('Invalid similarity calculation');
-      }
-      
-      const threshold = 0.92;
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-      console.log(`[ArtScanner] Similarity score: ${(similarity * 100).toFixed(2)}% | Threshold: ${(threshold * 100).toFixed(0)}%`);
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const code = jsQR(imageData.data, imageData.width, imageData.height, {
+      inversionAttempts: 'dontInvert',
+    });
 
-      if (similarity > threshold) {
-        setStatusMessage('✓ Art print verified!');
-
-        if (streamRef.current) {
-          streamRef.current.getTracks().forEach(track => track.stop());
-        }
-
-        setTimeout(() => {
-          onAuthenticated();
-        }, 500);
+    if (code) {
+      if (code.data === QR_SECRET) {
+        authenticatedRef.current = true;
+        setStatus('✓ Verified! Loading...');
+        stopAll();
+        setTimeout(() => onAuthenticated(), 600);
       } else {
-        setStatusMessage(`Not recognized (${(similarity * 100).toFixed(1)}% match). Try again.`);
-        setIsVerifying(false);
+        setStatus('Wrong QR code — use the correct one.');
+        setTimeout(() => setStatus('Point the QR code at the camera'), 2000);
       }
-      
-      img.dispose();
-      embedding.dispose();
-    } catch (error) {
-      console.error('Verification error:', error);
-      setStatusMessage(`Error: ${error instanceof Error ? error.message : 'Try again'}`);
-      setIsVerifying(false);
     }
-  };
-
-  const handleCancel = () => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
-    }
-    window.location.href = '/';
-  };
-
-  const cosineSimilarity = (a: number[], b: number[]): number => {
-    // Validate inputs
-    if (!a || !b || a.length !== b.length || a.length === 0) {
-      console.error('Invalid vectors for similarity', { aLen: a?.length, bLen: b?.length });
-      return 0;
-    }
-    
-    const dot = a.reduce((sum, val, i) => sum + val * b[i], 0);
-    const magA = Math.sqrt(a.reduce((sum, val) => sum + val * val, 0));
-    const magB = Math.sqrt(b.reduce((sum, val) => sum + val * val, 0));
-    
-    // Prevent division by zero
-    if (magA === 0 || magB === 0) {
-      console.error('Zero magnitude vector');
-      return 0;
-    }
-    
-    return dot / (magA * magB);
   };
 
   return (
-    <div 
+    <div
       className="flex flex-col items-center justify-center min-h-screen w-full relative overflow-hidden p-4"
       style={{
         background: `radial-gradient(ellipse 800px 1000px at center center,
@@ -235,68 +95,62 @@ export default function ArtScanner({ onAuthenticated }: ArtScannerProps) {
           #1A2D14 50%, #1B1034 65%, #110822 80%, #0A0416 100%)`,
       }}
     >
-      <div className="max-w-3xl w-full bg-black/40 backdrop-blur-sm rounded-3xl p-8 border-2 border-green-500">
-        {/* Title */}
-        <h2 
+      <div className="max-w-xl w-full bg-black/50 backdrop-blur-sm rounded-3xl p-8 border-2 border-green-500">
+        <h2
           className="text-white text-3xl font-bold text-center mb-6"
           style={{ fontFamily: 'Orbitron, system-ui, sans-serif' }}
         >
-          Scan Art Print to Enter
+          Scan to Enter
         </h2>
-        
-        {/* Camera Preview Box */}
-        <div className="relative bg-black rounded-2xl overflow-hidden mb-6 border-4 border-green-600 mx-auto"
-          style={{ aspectRatio: '2/3', maxWidth: '360px' }}>
-          <video
-            ref={videoRef}
-            autoPlay
-            playsInline
-            muted
-            className="w-full h-full object-cover"
-          />
+
+        {/* Camera view */}
+        <div
+          className="relative bg-black rounded-2xl overflow-hidden mb-6 border-4 border-green-600 mx-auto"
+          style={{ aspectRatio: '4/3', maxWidth: '420px' }}
+        >
+          <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
+
+          {/* Targeting overlay */}
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <div
+              className="border-4 border-green-400 rounded-xl"
+              style={{
+                width: '55%',
+                aspectRatio: '1/1',
+                boxShadow: '0 0 0 9999px rgba(0,0,0,0.45)',
+              }}
+            />
+          </div>
+
           <canvas ref={canvasRef} className="hidden" />
         </div>
 
-        {/* Status Message */}
+        {/* Status */}
         <div className="bg-black/80 rounded-xl p-4 mb-6">
-          <p 
-            className="text-center text-white text-lg font-semibold"
+          <p
+            className="text-center text-white text-base font-semibold"
             style={{ fontFamily: 'Inter, system-ui, sans-serif' }}
           >
-            {statusMessage}
+            {status}
           </p>
         </div>
 
-        {/* Action Buttons */}
-        <div className="flex gap-4 mb-4">
+        <div className="flex justify-center">
           <button
-            onClick={handleScanArtPrint}
-            disabled={!cameraActive || isVerifying}
-            className="flex-1 bg-green-500 hover:bg-green-600 disabled:bg-gray-600 disabled:cursor-not-allowed text-black text-xl font-bold py-4 px-6 rounded-full transition-all active:scale-95"
-            style={{ fontFamily: 'Inter, system-ui, sans-serif' }}
-          >
-            {isVerifying ? 'Verifying...' : 'Scan Art Print'}
-          </button>
-          
-          <button
-            onClick={handleCancel}
-            disabled={isVerifying}
-            className="bg-red-500 hover:bg-red-600 disabled:bg-gray-600 text-white text-xl font-bold py-4 px-8 rounded-full transition-all active:scale-95"
+            onClick={() => { stopAll(); window.location.href = '/'; }}
+            className="bg-red-500 hover:bg-red-600 text-white text-lg font-bold py-3 px-8 rounded-full transition-all active:scale-95"
             style={{ fontFamily: 'Inter, system-ui, sans-serif' }}
           >
             Cancel
           </button>
         </div>
 
-        {/* Instructions */}
-        <div className="text-center">
-          <p 
-            className="text-white/80 text-sm"
-            style={{ fontFamily: 'Inter, system-ui, sans-serif' }}
-          >
-            Make sure the art print is well-lit and centered in frame
-          </p>
-        </div>
+        <p
+          className="text-center text-white/50 text-sm mt-4"
+          style={{ fontFamily: 'Inter, system-ui, sans-serif' }}
+        >
+          Hold the QR code steady inside the green frame
+        </p>
       </div>
     </div>
   );

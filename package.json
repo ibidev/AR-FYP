@@ -9,9 +9,8 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@tensorflow-models/mobilenet": "^2.1.0",
-    "@tensorflow/tfjs": "^4.10.0",
     "@types/three": "^0.176.0",
+    "jsqr": "^1.4.0",
     "@vercel/blob": "^1.0.2",
     "lucide-react": "^0.263.1",
     "next": "14.0.4",
