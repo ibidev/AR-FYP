@@ -28,7 +28,11 @@ export default async function handler(req, res) {
       }
     );
 
-    if (!response.ok) throw new Error(`ElevenLabs API error: ${response.status}`);
+    if (!response.ok) {
+      let errBody = '';
+      try { errBody = await response.text(); } catch (_) {}
+      throw new Error(`ElevenLabs API error: ${response.status} — ${errBody}`);
+    }
 
     const buffer = await response.arrayBuffer();
     const base64 = Buffer.from(buffer).toString('base64');
