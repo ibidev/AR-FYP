@@ -1,6 +1,5 @@
 // api/chat.js - Vercel serverless function v2
 import OpenAI from 'openai';
-import { put } from '@vercel/blob';
 
 // Initialize OpenAI
 const openai = new OpenAI({
@@ -144,7 +143,11 @@ async function generateAudio(text) {
 
     const buffer = await response.arrayBuffer();
 
-    // Upload to Vercel Blob
+    // Return as base64 directly — no Vercel Blob needed
+    const base64 = Buffer.from(buffer).toString('base64');
+    return `data:audio/mpeg;base64,${base64}`;
+
+    // OLD: Upload to Vercel Blob
     const blob = await put(
       `rick-response-${Date.now()}.mp3`,
       new Blob([buffer], { type: 'audio/mpeg' }),
