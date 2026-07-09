@@ -1,0 +1,74 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body {
+  padding: 0;
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Oxygen,
+    Ubuntu, Cantarell, Fira Sans, Droid Sans, Helvetica Neue, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.1);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(34, 197, 94, 0.5);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(34, 197, 94, 0.7);
+}
+
+/* ============================================================
+   LANDING PAGE (pages/index.js) — ported from Claude Design
+   ============================================================ */
+.lp-root { background: #0d0d0d; color: #f2efeb; overflow-x: clip; font-family: Inter, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+.lp-root ::selection { background: #ff5e00; color: #0d0d0d; }
+.lp-mono { font-family: ui-monospace, Menlo, monospace; }
+.lp-orb { font-family: Orbitron, sans-serif; }
+
+@keyframes lp-portalSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+@keyframes lp-portalSpinRev { from { transform: rotate(360deg); } to { transform: rotate(0deg); } }
+@keyframes lp-portalPulse { 0%, 100% { opacity: .55; } 50% { opacity: .95; } }
+@keyframes lp-marqueeMove { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+@keyframes lp-blink { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
+
+/* hero */
+.lp-hero { position: relative; min-height: 100svh; display: flex; flex-direction: column; }
+.lp-nav { display: flex; align-items: center; justify-content: space-between; padding: 20px clamp(20px, 5vw, 56px); position: relative; z-index: 5; }
+.lp-navdot { width: 10px; height: 10px; background: #ff5e00; border-radius: 50%; box-shadow: 0 0 12px #ff5e00; animation: lp-blink 2.4s ease-in-out infinite; }
+.lp-cta { font-family: Orbitron, sans-serif; font-weight: 700; letter-spacing: .16em; color: #0d0d0d; background: #ff5e00; border-radius: 3px; display: inline-block; transition: background .2s, box-shadow .2s, color .2s, border-color .2s; }
+.lp-cta:hover { background: #ff8a4d; color: #0d0d0d; }
+.lp-cta-ghost { font-family: Orbitron, sans-serif; font-weight: 700; letter-spacing: .16em; color: #f2efeb; border: 1px solid rgba(242,239,235,.25); border-radius: 3px; display: inline-block; transition: color .2s, border-color .2s; }
+.lp-cta-ghost:hover { border-color: #ff5e00; color: #ff5e00; }
+
+.lp-herobody { flex: 1; display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, .95fr); align-items: center; gap: clamp(16px, 3vw, 48px); padding: 0 clamp(20px, 5vw, 56px) 48px; position: relative; z-index: 2; }
+.lp-tag { font-family: ui-monospace, Menlo, monospace; font-size: 10.5px; letter-spacing: .14em; color: rgba(242,239,235,.5); padding: 6px 12px; border: 1px solid rgba(242,239,235,.12); border-radius: 99px; }
+.lp-portalwrap { position: relative; min-width: 0; height: clamp(380px, 62vh, 640px); display: flex; align-items: center; justify-content: center; }
+.lp-ring { position: absolute; border-radius: 50%; aspect-ratio: 1; }
+
+/* cards */
+.lp-card { border: 1px solid rgba(242,239,235,.12); background: #111; padding: 28px 26px 32px; display: flex; flex-direction: column; gap: 16px; transition: border-color .2s; }
+.lp-card:hover { border-color: rgba(255,94,0,.6); }
+.lp-num { font-family: Orbitron, sans-serif; font-weight: 900; font-size: 40px; color: transparent; -webkit-text-stroke: 1px #ff5e00; }
+
+.lp-reveal { opacity: 1; transform: translateY(0); }
+
+/* mobile: stack hero */
+@media (max-width: 860px) {
+  .lp-herobody { grid-template-columns: 1fr; }
+  .lp-portalwrap { height: clamp(320px, 52vh, 460px); order: -1; }
+}
