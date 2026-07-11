@@ -39,39 +39,48 @@ const RickChatbot = () => {
     }
   }, [audioUrl]);
 
-  // Speech Recognition setup
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-      if (SpeechRecognition) {
-        const recognition = new SpeechRecognition();
-        recognition.interimResults = false;
-        recognition.continuous = false;
-        recognition.lang = 'en-US'; // force English so mic doesn't default to system locale (e.g. Urdu)
+  // Start a FRESH SpeechRecognition each time. Reusing one instance stops returning
+  // results after the first recording in Chrome — creating a new one every time fixes
+  // that. On a final transcript we auto-send (no need to press Enter).
+  const startListening = () => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) return;
 
-        recognition.onresult = (event: any) => {
-          const transcript = event.results[0][0].transcript;
-          setInputMessage(transcript);
-          setIsListening(false);
-        };
-
-        recognition.onerror = (event: any) => {
-          console.error('Speech recognition error:', event.error);
-          setIsListening(false);
-        };
-
-        recognition.onend = () => {
-          setIsListening(false);
-        };
-
-        recognitionRef.current = recognition;
-      }
+    // tear down any previous instance
+    if (recognitionRef.current) {
+      try { recognitionRef.current.abort(); } catch (e) {}
     }
-  }, []);
+
+    const recognition = new SpeechRecognition();
+    recognition.interimResults = false;
+    recognition.continuous = false;
+    recognition.lang = 'en-US'; // force English so the mic doesn't default to the system locale
+
+    recognition.onresult = (event: any) => {
+      const transcript = event.results[event.results.length - 1][0].transcript;
+      setIsListening(false);
+      const clean = (transcript || '').trim();
+      if (clean) {
+        setInputMessage(clean);
+        sendMessage(clean); // auto-send the voice note
+      }
+    };
+    recognition.onerror = (event: any) => {
+      console.error('Speech recognition error:', event.error);
+      setIsListening(false);
+    };
+    recognition.onend = () => setIsListening(false);
+
+    recognitionRef.current = recognition;
+    try {
+      recognition.start();
+      setIsListening(true);
+    } catch (e) {
+      setIsListening(false);
+    }
+  };
 
   const toggleListening = () => {
-    if (!recognitionRef.current) return;
-
     // Unlock audio on first interaction
     if (!audioUnlockedRef.current && audioRef.current) {
       audioRef.current.play().catch(() => {});
@@ -80,11 +89,10 @@ const RickChatbot = () => {
     }
 
     if (isListening) {
-      recognitionRef.current.stop();
+      try { recognitionRef.current && recognitionRef.current.stop(); } catch (e) {}
       setIsListening(false);
     } else {
-      recognitionRef.current.start();
-      setIsListening(true);
+      startListening();
     }
   };
 
@@ -92,17 +100,21 @@ const RickChatbot = () => {
     setIsPlayingAudio(false);
   };
 
-  const sendMessage = async () => {
-    if (!inputMessage.trim() || isLoading) return;
+  const sendMessage = async (overrideText) => {
+    // overrideText comes from the mic auto-send; onClick passes an event, so ignore non-strings.
+    const text = (typeof overrideText === 'string' && overrideText.trim())
+      ? overrideText.trim()
+      : inputMessage.trim();
+    if (!text || isLoading) return;
 
-    // ADD THIS - unlock audio on first interaction
+    // unlock audio on first interaction
     if (!audioUnlockedRef.current && audioRef.current) {
       audioRef.current.play().catch(() => {});
       audioRef.current.pause();
       audioUnlockedRef.current = true;
     }
 
-    const userMessage = { role: 'user', content: inputMessage, timestamp: Date.now() };
+    const userMessage = { role: 'user', content: text, timestamp: Date.now() };
     setMessages(prev => [...prev, userMessage]);
     setInputMessage('');
     setIsLoading(true);
@@ -250,7 +262,7 @@ const RickChatbot = () => {
               {isListening ? <MicOff size={22} /> : <Mic size={22} />}
             </button>
             <button
-              onClick={sendMessage}
+              onClick={() => sendMessage()}
               disabled={busy || !inputMessage.trim()}
               title="Send"
               style={{ width: 56, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, border: 'none', background: '#ff5e00', color: '#0d0d0d', cursor: busy || !inputMessage.trim() ? 'not-allowed' : 'pointer', opacity: busy || !inputMessage.trim() ? 0.5 : 1 }}
