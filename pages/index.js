@@ -3,8 +3,10 @@ import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import { useEffect } from 'react'
 
-// Lazy-load the WebGL hero so first paint never waits on three.js
-const HeroAvatar = dynamic(() => import('../components/HeroAvatar'), {
+// Lazy-load the WebGL hero so first paint never waits on three.js.
+// Reuse Rick3DViewer (the same viewer used on /experience, which renders reliably)
+// in transparent mode so it sits inside the CSS portal rings.
+const Rick3DViewer = dynamic(() => import('../components/Rick3DViewer'), {
   ssr: false,
   loading: () => (
     <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', font: '500 11px/1 ui-monospace, Menlo, monospace', letterSpacing: '.2em', color: 'rgba(255,255,255,.45)' }}>
@@ -109,7 +111,7 @@ export default function Home() {
               <div className="lp-ring" style={{ width: 'min(94%, 560px)', border: '1px solid rgba(255,94,0,.14)' }} />
 
               <div style={{ position: 'absolute', inset: 0, zIndex: 2 }}>
-                <HeroAvatar />
+                <Rick3DViewer isPlayingAudio={false} isThinking={false} isLoading={false} transparent modelUrl="/models/ib.glb" />
               </div>
 
               <div className="lp-mono" style={{ position: 'absolute', bottom: 4, left: '50%', transform: 'translateX(-50%)', fontSize: 10, letterSpacing: '.2em', color: 'rgba(242,239,235,.4)', whiteSpace: 'nowrap' }}>DRAG TO SPIN — LIVE WEBGL, NOT VIDEO</div>
