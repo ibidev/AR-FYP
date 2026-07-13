@@ -182,6 +182,11 @@ export default async function handler(req, res) {
   }
 
   try {
+    // Fast warmup ping to keep the serverless function hot (no LLM/TTS work).
+    if (req.body && req.body.warmup) {
+      return res.status(200).json({ ok: true });
+    }
+
     const { messages } = req.body;
 
     if (!messages || !Array.isArray(messages)) {
@@ -218,18 +223,9 @@ export default async function handler(req, res) {
 
     const cleanText = rickResponse.replace(/[*_]/g, '');
 
-    // Generate audio using ElevenLabs (graceful: null if it fails, text still shows)
-    let audioUrl = null;
-    try {
-      audioUrl = await generateAudio(cleanText);
-    } catch (error) {
-      console.error('Audio generation failed:', error);
-    }
-
-    res.status(200).json({
-      message: rickResponse,
-      audioUrl: audioUrl
-    });
+    // Return the text immediately. The client fetches audio separately via /api/speak,
+    // so the written reply appears right away instead of waiting for voice synthesis.
+    res.status(200).json({ message: cleanText });
 
   } catch (error) {
     // Last-resort catch — still return 200 with usable text so the UI never breaks

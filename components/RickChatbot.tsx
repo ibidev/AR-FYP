@@ -132,18 +132,22 @@ const RickChatbot = () => {
       if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
 
       const data = await response.json();
-      
-      const rickMessage = { 
-        role: 'assistant', 
-        content: data.message, 
-        timestamp: Date.now() 
-      };
+      const replyText = data.message;
 
+      // Show the written reply immediately — don't wait for the voice to be generated.
       setIsThinking(false);
-      setMessages(prev => [...prev, rickMessage]);
-      if (data.audioUrl) {
-        setAudioUrl(data.audioUrl);
-      }
+      setMessages(prev => [...prev, { role: 'assistant', content: replyText, timestamp: Date.now() }]);
+
+      // Fetch the voice in the background and play it when ready, so the text isn't
+      // held up by text-to-speech. This roughly halves how long the reply feels.
+      fetch('/api/speak', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: replyText }),
+      })
+        .then(r => r.json())
+        .then(sdata => { if (sdata.audioUrl) setAudioUrl(sdata.audioUrl); })
+        .catch(err => console.error('Voice fetch failed:', err));
 
     } catch (error) {
       console.error('Error sending message:', error);

@@ -5,7 +5,8 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const { text } = req.body;
+  const { text, warmup } = req.body;
+  if (warmup) return res.status(200).json({ ok: true }); // keep the function warm, no TTS work
   if (!text) return res.status(400).json({ error: 'Text is required' });
 
   try {
@@ -23,7 +24,8 @@ export default async function handler(req, res) {
         },
         body: JSON.stringify({
           text,
-          model_id: process.env.ELEVENLABS_MODEL_ID || 'eleven_turbo_v2_5',
+          // Flash v2.5 = ElevenLabs' lowest-latency model, for a snappy live demo.
+          model_id: 'eleven_flash_v2_5',
         }),
       }
     );

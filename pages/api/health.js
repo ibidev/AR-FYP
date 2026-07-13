@@ -71,7 +71,7 @@ export default async function handler(req, res) {
       const g = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
         method: 'POST',
         headers: { 'xi-api-key': elKey, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: 'Preflight check.', model_id: process.env.ELEVENLABS_MODEL_ID || 'eleven_turbo_v2_5' }),
+        body: JSON.stringify({ text: 'Preflight check.', model_id: 'eleven_flash_v2_5' }),
       });
       if (!g.ok) throw new Error(`HTTP ${g.status} ${(await g.text()).slice(0, 100)}`);
       const bytes = (await g.arrayBuffer()).byteLength;

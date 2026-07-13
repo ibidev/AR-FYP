@@ -25,7 +25,7 @@ export default async function handler(req, res) {
         },
         body: JSON.stringify({
           text: 'Test audio.',
-          model_id: process.env.ELEVENLABS_MODEL_ID || 'eleven_turbo_v2_5',
+          model_id: 'eleven_flash_v2_5',
         }),
       }
     );
